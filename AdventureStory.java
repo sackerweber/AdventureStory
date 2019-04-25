@@ -39,6 +39,7 @@ import java.util.Arrays;
 import java.util.Random;
 import java.io.PrintWriter;
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 
 public class AdventureStory {
@@ -159,6 +160,34 @@ public class AdventureStory {
      * @return false on an IOException, and true otherwise.
      */
     public static boolean saveBookmark(String storyFile, String curRoom, String bookmarkFile) {
+        
+        File file = new File(bookmarkFile);
+        FileWriter fw = null;
+        
+        try {
+            fw = new FileWriter(file);
+            fw.write(Config.MAGIC_BOOKMARK + "\n");
+            fw.write(storyFile + "\n");
+            fw.write(curRoom);
+        }
+        catch (IOException ioe) {
+            System.out.println("Error saving to bookmark: " + bookmarkFile);
+            return false;
+        }
+        catch (RuntimeException rte) {
+            System.out.println("Error finding bookmarkFile: " + bookmarkFile);
+            return false;
+        }
+        finally {
+            try {
+                fw.close();
+            }
+            catch (IOException ioe) {
+                System.out.println("Error closing fileWriter");
+                return false;
+            }
+        }
+        
         return true;
     }
 
@@ -207,27 +236,48 @@ public class AdventureStory {
         ArrayList<ArrayList<String[]>> trans, String[] curRoom) {
         
         File file = new File(fName);
+        String promptIOE = "Error reading file from: ";
+        String promptRTE = "Unable to read first line from file: ";
         
         try {
             Scanner scnr = new Scanner(file);
+            
+            // read first line
             if (scnr.hasNextLine()) {
-                String currentLine = scnr.nextLine();
+                String currentLine = scnr.nextLine().trim();
+                
+//                // BRANCH - check for null
+//                if (currentLine.equals(null) || currentLine.isEmpty()) {
+//                    scnr.close();
+//                    return false; 
+//                } 
+                // BRANCH - parse as story
                 if (currentLine.equals(Config.MAGIC_STORY)) {
                     parseStory(scnr, rooms, trans, curRoom);
-                } else if (currentLine.equals(Config.MAGIC_BOOKMARK)) {
+                } 
+                // BRANCH - parse as bookmark
+                else if (currentLine.equals(Config.MAGIC_BOOKMARK)) {
                     parseBookmark(scnr, rooms, trans, curRoom);
+                } 
+                // return false if neither story nor bookmark
+                else {
+                    scnr.close();
+                    return false;
                 }
+            } else {
+                scnr.close();
+                return false;
             }
+            // check file for exceptions
             scnr.useDelimiter("\\Z");
             scnr.close();
         } catch (IOException ioe) {
-            System.out.println("Error reading file: " + fName);
+            System.out.println(promptIOE + fName);
             return false;
         } catch(RuntimeException rte) {
-            System.out.println("Unable to read first line from file: " + fName);
+            System.out.println(promptRTE + fName);
             return false;
         } finally {
-
         }
         
         return true;
@@ -266,6 +316,27 @@ public class AdventureStory {
      */
     public static boolean parseBookmark(Scanner sc, ArrayList<String[]> rooms,
         ArrayList<ArrayList<String[]>> trans, String[] curRoom) {
+        
+        boolean invalid = false;
+        String fileName = null;
+        String roomID = null;
+        
+        try {
+            fileName = sc.nextLine().trim();
+            roomID = sc.nextLine().trim();
+            invalid = parseFile(fileName, rooms, trans, curRoom);
+            curRoom[0] = roomID;
+            if (!invalid ) {
+                return false;
+            }
+            
+        }
+        catch (RuntimeException rte) {
+            System.out.println("Unable to read first line from file: " + fileName);
+            return false;
+            
+        }
+        
         return true;
     }
 
@@ -750,6 +821,29 @@ public class AdventureStory {
      *         Otherwise, return null. Also, return null if there is a NumberFormatException. 
      */
     public static String probTrans(Random rand, ArrayList<String[]> curTrans) {
+        
+        // sum the probability weights
+        int totalWeight = 0;
+        for (int i = 0; i < curTrans.size(); ++i) {
+            if (curTrans.get(i)[Config.TRAN_PROB] == null ) {
+                return null;
+            }
+            totalWeight += Integer.parseInt(curTrans.get(i)[Config.TRAN_PROB]);
+        }
+        
+        // draw random integer
+        int randInt = rand.nextInt(totalWeight - 1);
+        
+        // sum up the probability weights
+        int compareWeight = 0;
+        for (int i = 0; i < curTrans.size(); ++i) {
+            compareWeight += Integer.parseInt(curTrans.get(i)[Config.TRAN_PROB]);
+            if (compareWeight > randInt) {
+                return curTrans.get(i)[Config.TRAN_ROOM_ID];
+            }
+        }
+            
+        
         return null;
     }
 
@@ -912,26 +1006,26 @@ public class AdventureStory {
             }
             // BEGIN PLAYING LOOP----------------------------------------------
             while (playing) {
-                ArrayList<String[]> currTrans = new ArrayList<String[]>();
+                
+                
+                ArrayList<String[]> curTrans = new ArrayList<String[]>();
                 int currIndex = getRoomIndex(curRoom[0], rooms);
                 boolean victory = false;
                 boolean defeat = false;
 
-
                 if (currIndex != -1) {
-                    currTrans = trans.get(currIndex);
-                    victory = currTrans.get(0)[Config.TRAN_DESC].equals(Config.SUCCESS);
-                    defeat = currTrans.get(0)[Config.TRAN_DESC].equals(Config.FAIL);
+                    curTrans = trans.get(currIndex);
+                    victory = curTrans.get(0)[Config.TRAN_DESC].equals(Config.SUCCESS);
+                    defeat = curTrans.get(0)[Config.TRAN_DESC].equals(Config.FAIL);
                 } else {
                     defeat = true;
                 }
 
-
                 // output the room and transition details
                 displayRoom(curRoom[0], rooms);
-                if (currTrans.size() > 0
-                    && !currTrans.get(0)[Config.TRAN_DESC].equals(Config.SUCCESS)
-                    && !currTrans.get(0)[Config.TRAN_DESC].equals(Config.FAIL)) {
+                if (curTrans.size() > 0
+                    && !curTrans.get(0)[Config.TRAN_DESC].equals(Config.SUCCESS)
+                    && !curTrans.get(0)[Config.TRAN_DESC].equals(Config.FAIL)) {
                     displayTransitions(curRoom[0], rooms, trans);
                 }
 
